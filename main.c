@@ -1,11 +1,16 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
-#include <getopt.h>
-#include <math.h>
-#include <limits.h>
 #include <fftw3.h>
+#include <getopt.h>
+#include <limits.h>
+#include <math.h>
+#include <sys/stat.h>
+#ifdef DEBUG_PLAYSOUND
+#include <alsa/asoundlib.h>
+#endif
 
 
 #define RATE 8000      /* 8.0kHz */
@@ -50,13 +55,14 @@ static const float dtmf[][2] =
 
 
 /* Sets the number of bytes used in 'size' */
-static double *make_dtmf(float secs, int key, size_t *size)
+static uint16_t *make_dtmf(float secs, int key, size_t *size)
 {
     int i;
-    double a, b, *buf;
+    double a, b, c;
+    uint16_t *buf;
 
     assert(size);
-    *size = sizeof(double) * secs * RATE;
+    *size = sizeof(uint16_t) * secs * RATE;
     buf = fftw_malloc(*size);
 
     /* Tone generator: DTMF
@@ -74,7 +80,11 @@ static double *make_dtmf(float secs, int key, size_t *size)
     {
         a = sin(i*(PI2 * (dtmf[key][0]/8000.0)));
         b = sin(i*(PI2 * (dtmf[key][1]/8000.0)));
-        buf[i] = (a + b) * (double)(SHRT_MAX / 2.0);
+        c = ((a + b) * (double)(SHRT_MAX / 2.0));
+        buf[i] = (uint16_t)c;
+#ifdef DEBUG_OUTPUT
+        printf("%lf\n", c);
+#endif
     }
 
     return buf;
@@ -114,12 +124,12 @@ static void report_tones(int n, fftw_complex *fft)
 
 int main(int argc, char **argv)
 {
-    int i, tone, do_gen_tone;
+    int i, tone, do_gen_tone, n_samples;
     float secs;
-    double *data;
     const char *fname;
-    FILE *fp;
     size_t size;
+    FILE *fp;
+    struct stat stat;
     fftw_plan plan;
     fftw_complex *out;
 
@@ -127,7 +137,6 @@ int main(int argc, char **argv)
     secs = 0.0f;
     tone = 0;
     fname = NULL;
-    data = NULL;
 
     while ((i=getopt(argc, argv, "-T:t:d:h")) != -1)
     {
@@ -139,19 +148,16 @@ int main(int argc, char **argv)
             case 'd': secs = atoi(optarg); break;
             case 'h': usage(argv[0]); break;
             default:
-                fprintf(stderr, "Unsupported argument: %s\n", optarg);
-                exit(EXIT_FAILURE);
+                ERR("Unsupported argument: %s", optarg);
         }
-    }
-
-    if (secs <= 0)
-    {
-        fprintf(stderr, "Unsupported duration value: %f\n", secs);
-        exit(EXIT_FAILURE);
     }
 
     if (do_gen_tone)
     {
+        uint16_t *data;
+        if (secs <= 0)
+          ERR("Unsupported duration value: %f", secs);
+
         data = make_dtmf(secs, tone, &size);
 
         /* If no fname, use stdout */
@@ -165,18 +171,57 @@ int main(int argc, char **argv)
         if (fwrite(data, 1, size, fp) != size)
           ERR("Error writing data to %s", fname);
 
+        /* Based on the simple ALSA example:
+         * http://www.alsa-project.org/alsa-doc/alsa-lib/_2test_2pcm_min_8c-example.html
+         */
+#ifdef DEBUG_PLAYSOUND
+        {
+            snd_pcm_t *dev;
+            snd_pcm_sframes_t frames;
+            if (snd_pcm_open(&dev, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0)
+              ERR("Error opening the default sound device");
+            if (snd_pcm_set_params(dev, SND_PCM_FORMAT_U16,
+                                   SND_PCM_ACCESS_RW_INTERLEAVED,
+                                   1, RATE, 1, 0) < 0)
+              ERR("Error setting audio device options");
+            if ((frames = snd_pcm_writei(dev, data, size) < 0))
+              frames = snd_pcm_recover(dev, frames, 0);
+            if (frames < 0)
+              ERR("Error writing to the sound device");
+            snd_pcm_close(dev);
+        }
+#endif /* DEBUG_PLAYSOUND */
         fclose(fp);
         free(data);
     }
     else /* Else: analyize tone... default operation */
     {
-        out = fftw_malloc(sizeof(fftw_complex) * secs * RATE);
-        plan = fftw_plan_dft_r2c_1d(secs * RATE, data, out, FFTW_ESTIMATE);
+        double *data;
+
+        if (!fname || !(fp = fopen(fname, "rb")))
+          ERR("Could not open %s for reading", fname);
+
+        /* Assume the input is a series of double */
+        fstat(fileno(fp), &stat);
+        size = stat.st_size;
+        n_samples = ceil((double)size / (double)sizeof(double));
+
+        /* Suck in the data */
+        size = sizeof(double) * n_samples;
+        data = malloc(size);
+        if (fread(data, 1, size, fp) != size)
+          ERR("Error extracting %d samples from output file", n_samples);
+
+        out = fftw_malloc(sizeof(fftw_complex) * n_samples);
+        plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
+
         report_tones(secs * RATE, out);
+
         fftw_destroy_plan(plan);
         fftw_free(out);
         fftw_free(data);
+        fclose(fp);
     }
 
     return 0;

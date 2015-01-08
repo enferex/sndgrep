@@ -1,8 +1,8 @@
 APP=sndgrep
 OBJS=main.o
 CC=gcc
-CFLAGS=-Wall -g3 -O0
-CLIBS=-lfftw3 -lm
+CFLAGS=-Wall -g3 -O0 $(EXTRA_CFLAGS)
+CLIBS=-lfftw3 -lm -lasound
 
 %.o: %.c
 	$(CC) -c $^ $(CFLAGS)
