@@ -54,15 +54,18 @@ static const float dtmf[][2] =
 };
 
 
+typedef double frame_t;
+
+
 /* Sets the number of bytes used in 'size' */
-static uint16_t *make_dtmf(float secs, int key, size_t *size)
+static frame_t *make_dtmf(float secs, int key, size_t *size)
 {
     int i;
     double a, b, c;
-    uint16_t *buf;
+    frame_t *buf;
 
     assert(size);
-    *size = sizeof(uint16_t) * secs * RATE;
+    *size = sizeof(frame_t) * secs * RATE;
     buf = fftw_malloc(*size);
 
     /* Tone generator: DTMF
@@ -83,7 +86,7 @@ static uint16_t *make_dtmf(float secs, int key, size_t *size)
         c = ((a + b) * (double)(SHRT_MAX / 2.0));
         buf[i] = c;
 #ifdef DEBUG_OUTPUT
-        printf("%u\n", buf[i]);
+        printf("%f\n", buf[i]);
         fflush(NULL);
 #endif
     }
@@ -142,9 +145,6 @@ static void report_tones(int n, fftw_complex *fft)
 }
 
 
-typedef uint16_t frame_t;
-
-
 static void gen_tone(const char *fname, float secs, int tone)
 {
     FILE *fp;
@@ -177,7 +177,7 @@ static void gen_tone(const char *fname, float secs, int tone)
         snd_pcm_sframes_t frames;
         if (snd_pcm_open(&dev, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0)
           ERR("Error opening the default sound device");
-        if (snd_pcm_set_params(dev, SND_PCM_FORMAT_U16,
+        if (snd_pcm_set_params(dev, SND_PCM_FORMAT_FLOAT64,
                                SND_PCM_ACCESS_RW_INTERLEAVED,
                                1, RATE, 1, 0) < 0)
           ERR("Error setting audio device options");
@@ -237,7 +237,7 @@ static void analyize_tone(const char *fname, float secs, int tone)
             byte += sizeof(frame);
             data[i] = (double)frame;
 #ifdef DEBUG_OUTPUT
-            printf("%u\n", (frame_t)data[i]);
+            printf("%f\n", (frame_t)data[i]);
             fflush(NULL);
 #endif
         }
