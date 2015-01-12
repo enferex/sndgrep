@@ -9,6 +9,9 @@ CLIBS=-lfftw3 -lm -lasound
 
 $(APP): $(OBJS)
 	$(CC) -o $@ $^ $(CLIBS)
+
+test: $(APP)
+	./$(APP) --generate -t 1 -d 1 test.dat	
 	
 clean:
 	$(RM) $(APP) $(OBJS)

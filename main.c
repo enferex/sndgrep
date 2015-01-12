@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <fftw3.h>
 #include <getopt.h>
@@ -28,9 +29,12 @@ do {                                      \
 
 static void usage(const char *execname)
 {
-    printf("Usage: %s [-t tone | -T tone] [-d duration] [file]\n"
-           "  -t tone:     Search for tone (in Hz)\n"
-           "  -T tone:     Generate tone (in Hz)\n"
+    printf("Usage: %s <--search | --generate> [-t tone] [--dtmf] "
+           "[-d duration] [file]\n"
+           "  --search:    Search for '-t' tone\n"
+           "  --generate:  Generate '-t' tone\n"
+           "  -t tone:     Search or generate tone "
+           "(in Hz, or if --dtmf the corresponding dtmf digit)\n"
            "  -d duration: Duration (seconds) of tone to generate or search\n"
            "  file:        File (search for or generate tone to this)\n",
            execname);
@@ -113,7 +117,7 @@ static void dump_dtmf(fftw_complex *fft)
 }
 
 
-static void report_tones(int n, fftw_complex *fft)
+static void find_tone(int tone, int n, fftw_complex *fft, _Bool do_dtmf)
 {
     int i, idx;
     double min;
@@ -131,8 +135,6 @@ static void report_tones(int n, fftw_complex *fft)
         /* printf("[%d]: %fHz (value: %f)\n", i, (float)i, fft[i][1]); */
     }
 
-    dump_dtmf(fft);
-
     /* Take the FFT index (bin) and convert back to a frequency
      * The freq represented by each bin is:
      * freq = index * sample_rate / num_samples
@@ -141,11 +143,20 @@ static void report_tones(int n, fftw_complex *fft)
      * Thanks to:
      * https://stackoverflow.com/questions/4364823/how-to-get-frequency-from-fft-result
      */
-    printf("Frequency: %fHz", (double)idx);
+    if (do_dtmf)
+        printf("Frequency: %fHz", (double)idx);
+    else
+    {
+        printf("Searched tone(%f)  ==>  ", (float)tone);
+        if (tone > n || tone < n)
+          printf("N/A (choose a frequency less than %.02fHz\n", (float)n);
+        else
+          printf("(Real: %fHz, Imag: %f)Hz\n", fft[tone][0], fft[tone][1]);
+    }
 }
 
 
-static void gen_tone(const char *fname, float secs, int tone)
+static void gen_tone(const char *fname, float secs, int tone, _Bool do_dtmf)
 {
     FILE *fp;
     size_t size;
@@ -153,6 +164,9 @@ static void gen_tone(const char *fname, float secs, int tone)
 
     if (secs <= 0)
       ERR("Unsupported duration value: %f", secs);
+
+    printf("Writing tone of %.02fHz for %02f second%s to %s...\n",
+           (float)tone, secs, (secs == 1.0f) ? "" : "s", fname);
 
     data = make_dtmf(secs, tone, &size);
 
@@ -193,7 +207,11 @@ static void gen_tone(const char *fname, float secs, int tone)
 }
 
 
-static void analyize_tone(const char *fname, float secs, int tone)
+static void analyize_tone(
+    const char *fname,
+    float       secs,
+    int         tone,
+    _Bool       do_dtmf)
 {
     int i, n_samples;
     double *data;
@@ -250,7 +268,10 @@ static void analyize_tone(const char *fname, float secs, int tone)
         plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
 
-        report_tones(secs * RATE, out);
+        find_tone(tone, secs * RATE, out, do_dtmf);
+        if (do_dtmf)
+          dump_dtmf(out);
+
         fftw_destroy_plan(plan);
         fftw_free(out);
         fftw_free(data);
@@ -262,34 +283,50 @@ static void analyize_tone(const char *fname, float secs, int tone)
 
 int main(int argc, char **argv)
 {
-    int i, tone;
-    _Bool do_gen_tone;
+    int i, tone, do_gen_tone;
     float secs;
+    _Bool do_dtmf;
     const char *fname;
+    static const struct option opts[] = 
+    {
+        {"generate", no_argument,       NULL, 'g'},
+        {"search",   no_argument,       NULL, 's'},
+        {"tone",     required_argument, NULL, 't'},
+        {"duration", required_argument, NULL, 'd'},
+        {"help",     no_argument,       NULL, 'h'},
+        {"dtmf",     no_argument,       NULL, 'D'},
+        {NULL, 0, NULL, 0},
+    };
 
     do_gen_tone = -1;
+    do_dtmf = false;
     secs = 0.0f;
     tone = 0;
     fname = NULL;
 
-    while ((i=getopt(argc, argv, "-T:t:d:h:x")) != -1)
+    while ((i=getopt_long(argc, argv, "-gst:d:h:x", opts, NULL)) != -1)
     {
         switch (i)
         {
-            case   1: fname = optarg; break;
-            case 'T': tone = atoi(optarg); do_gen_tone = true; break;
-            case 't': tone = atoi(optarg); do_gen_tone = false; break;
+            case   1: 
+                if (strncmp("--dtmf", optarg, strlen("--dtmf")) == 0)
+                  do_dtmf = true;
+                else
+                  fname = optarg;
+                break;
+            case 'g': do_gen_tone = true; break;
+            case 's': do_gen_tone = false; break;
+            case 't': tone = atoi(optarg); break; 
             case 'd': secs = atoi(optarg); break;
             case 'h': usage(argv[0]); break;
-            default:
-                ERR("Unsupported argument: %s", optarg);
+            default: exit(EXIT_FAILURE); break;
         }
     }
 
     if (do_gen_tone)
-      gen_tone(fname, secs, tone);
+      gen_tone(fname, secs, tone, do_dtmf);
     else
-      analyize_tone(fname, secs, tone);
+      analyize_tone(fname, secs, tone, do_dtmf);
 
     return 0;
 }
