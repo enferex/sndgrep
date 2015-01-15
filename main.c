@@ -14,9 +14,10 @@
 #endif
 
 
-#define RATE 8000      /* 8.0kHz */
-#define PI2 (M_PI*2.0)
-#define TAG "sndgrep"
+#define RATE          8000      /* 8.0kHz */
+#define PI2           (M_PI*2.0)
+#define TAG           "sndgrep"
+#define DTMF_BAD_DIGIT -1        /* -1 isnt a key :-) */
 
 
 #define ERR(...) \
@@ -25,6 +26,9 @@ do {                                      \
     fputc('\n', stderr);                  \
     exit(EXIT_FAILURE);                   \
 } while ( 0 )
+
+
+#define ARRAY_LEN(_a) sizeof((_a))/sizeof((_a)[0])
 
 
 static void usage(const char *execname)
@@ -43,6 +47,8 @@ static void usage(const char *execname)
 
 
 /* https://en.wikipedia.org/wiki/Dual-tone_multi-frequency_signaling */
+#define DTMF_LO 0 /* Low frequency index  */
+#define DTMF_HI 1 /* High frequency index */
 static const float dtmf[][2] = 
 {
     {941.0f, 1336.0f}, /* 0 */
@@ -99,42 +105,67 @@ static frame_t *make_dtmf(float secs, int key, size_t *size)
 }
 
 
-static void dump_dtmf(fftw_complex *fft)
+static void dump_dtmf(fftw_complex *fft, int match_digit)
 {
     int i;
     float lo, hi;
 
-    for (i=0; i<sizeof(dtmf)/sizeof(dtmf[0]); ++i)
+    for (i=0; i<ARRAY_LEN(dtmf); ++i)
     {
         lo = dtmf[i][0];
         hi = dtmf[i][1];
-        printf("Tone %d (%.02fHz, %.02fHz): "
-               "Found (%.02fHz, %.02fHz :: %.02fHz, %.02fHz\n",
+        printf("%sTone %d (%.02fHz, %.02fHz): "
+               "Found (Low: %.02fHz, High: %.02fHz)%s\n",
+               match_digit == i ? "==> " : "",
                i, lo, hi, 
-               fft[(int)lo][0], fft[(int)lo][1],
-               fft[(int)hi][0], fft[(int)hi][1]);
+               fft[(int)lo][1],
+               fft[(int)hi][1],
+               match_digit == i ? " <==" : "");
     }
+}
+
+#if 0
+typedef struct fft_bin
+{
+    int    idx;
+    double val;
+} fft_bin_t;
+
+
+static int cmp_fft_bins(const void *a, const void *b)
+{
+    const fft_bin_t *aa = (fft_bin_t *)a;
+    const fft_bin_t *bb = (fft_bin_t *)b;
+    return aa->val < bb->val;
+}
+#endif
+
+
+/* Search the DTMF tone bins and find the closest dtmf (hi and lo) that match.
+ * Returns the DTMF key that generates the two tones together.
+ */
+static int find_dtmf_digit(fftw_complex *fft)
+{
+    int i, lo_idx, hi_idx;
+    double lo, hi;
+
+    /* Find match */
+    for (i=0; i<ARRAY_LEN(dtmf); ++i)
+    {
+        lo_idx = (int)dtmf[i][DTMF_LO];
+        hi_idx = (int)dtmf[i][DTMF_HI];
+        lo = fabs(fft[lo_idx][1]);
+        hi = fabs(fft[hi_idx][1]);
+        if (lo > 1.0 && hi > 1.0)
+          return i;
+    };
+
+    return DTMF_BAD_DIGIT;
 }
 
 
 static void find_tone(int tone, int n, fftw_complex *fft, _Bool do_dtmf)
 {
-    int i, idx;
-    double min;
-
-    min = fft[0][1];
-    idx = 0;
-
-    for (i=0; i<n; ++i)
-    {
-        if (fft[i][1] < min)
-        {
-            min = fft[i][1];
-            idx = i;
-        }
-        /* printf("[%d]: %fHz (value: %f)\n", i, (float)i, fft[i][1]); */
-    }
-
     /* Take the FFT index (bin) and convert back to a frequency
      * The freq represented by each bin is:
      * freq = index * sample_rate / num_samples
@@ -144,9 +175,26 @@ static void find_tone(int tone, int n, fftw_complex *fft, _Bool do_dtmf)
      * https://stackoverflow.com/questions/4364823/how-to-get-frequency-from-fft-result
      */
     if (do_dtmf)
-        printf("Frequency: %fHz", (double)idx);
+    {
+        int digit = find_dtmf_digit(fft);
+        if (digit != DTMF_BAD_DIGIT)
+          printf(" DTMF Key %d\n", digit);
+        else
+          printf(" DTMF Key Not Found\n");
+        dump_dtmf(fft, digit);
+    }
     else
     {
+#if 0
+        fft_bin_t *bins = malloc(n * sizeof(fft_bin_t));
+        for (i=0; i<n; ++i)
+        {
+            bins[i].idx = i;
+            bins[i].val = fft[i][1];
+        }
+
+        qsort(bins, n, sizeof(fft_bin_t), cmp_fft_bins);
+#endif
         printf("Searched tone(%f)  ==>  ", (float)tone);
         if (tone > n || tone < n)
           printf("N/A (choose a frequency less than %.02fHz\n", (float)n);
@@ -260,17 +308,11 @@ static void analyize_tone(
 #endif
         }
 
-        //byte = fread(data, 1, size, fp);
-        //if ((fp != stdin) && (byte != size))
-        //  ERR("Error extracting %d samples from output file", n_samples);
-
         out = fftw_malloc(sizeof(fftw_complex) * n_samples);
         plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
 
         find_tone(tone, secs * RATE, out, do_dtmf);
-        if (do_dtmf)
-          dump_dtmf(out);
 
         fftw_destroy_plan(plan);
         fftw_free(out);
@@ -308,18 +350,14 @@ int main(int argc, char **argv)
     {
         switch (i)
         {
-            case   1: 
-                if (strncmp("--dtmf", optarg, strlen("--dtmf")) == 0)
-                  do_dtmf = true;
-                else
-                  fname = optarg;
-                break;
+            case   1: fname = optarg; break;
             case 'g': do_gen_tone = true; break;
             case 's': do_gen_tone = false; break;
             case 't': tone = atoi(optarg); break; 
             case 'd': secs = atoi(optarg); break;
+            case 'D': do_dtmf = true; break;
             case 'h': usage(argv[0]); break;
-            default: exit(EXIT_FAILURE); break;
+            default:  exit(EXIT_FAILURE); break;
         }
     }
 

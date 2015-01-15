@@ -11,7 +11,8 @@ $(APP): $(OBJS)
 	$(CC) -o $@ $^ $(CLIBS)
 
 test: $(APP)
-	./$(APP) --generate -t 1 -d 1 test.dat	
+	./$(APP) --dtmf --generate -t 1 -d 1 test.dat	
+	./$(APP) --dtmf --search   -t 1 -d 1 test.dat	
 	
 clean:
 	$(RM) $(APP) $(OBJS)
