@@ -111,7 +111,7 @@ static frame_t *make_dtmf(float secs, int key, size_t *size)
 }
 
 
-static void dump_dtmf(fftw_complex *fft, int match_digit)
+static void dump_dtmf(fftw_complex *fft)
 {
     int i;
     float lo, hi;
@@ -120,13 +120,10 @@ static void dump_dtmf(fftw_complex *fft, int match_digit)
     {
         lo = dtmf[i][0];
         hi = dtmf[i][1];
-        printf("%sTone %d (%.02fHz, %.02fHz): "
-               "Found (Low: %.02fHz, High: %.02fHz)%s\n",
-               match_digit == i ? "==> " : "",
+        printf("==> Tone %d (%.02fHz, %.02fHz): "
+               "Found (Low: %.02fHz, High: %.02fHz) <==\n",
                i, lo, hi, 
-               fft[(int)lo][1],
-               fft[(int)hi][1],
-               match_digit == i ? " <==" : "");
+               fft[(int)lo][1], fft[(int)hi][1]);
     }
 }
 
@@ -154,7 +151,8 @@ static int find_dtmf_digit(fftw_complex *fft)
 }
 
 
-static void find_tone(int tone, int n, fftw_complex *fft, int flags)
+/* Returns true if 'tone' is found */
+static _Bool find_tone(int tone, int n, fftw_complex *fft, int flags)
 {
     /* Take the FFT index (bin) and convert back to a frequency
      * The freq represented by each bin is:
@@ -168,21 +166,26 @@ static void find_tone(int tone, int n, fftw_complex *fft, int flags)
     {
         int digit = find_dtmf_digit(fft);
         if (digit != DTMF_BAD_DIGIT)
-          printf("==> DTMF Key %d <==\n", digit);
-        else
-          printf("==> DTMF Key Not Found <==\n");
-
-        if (flags & FLAG_VERBOSE)
-          dump_dtmf(fft, digit);
+        {
+            printf("==> DTMF Key %d <==\n", digit);
+            return true;
+        }
     }
     else
     {
         printf("Searched tone(%f)  ==>  ", (float)tone);
         if (tone > n || tone < n)
-          printf("N/A (choose a frequency less than %.02fHz\n", (float)n);
+        {
+            printf("N/A (choose a frequency less than %.02fHz\n", (float)n);
+            return false;
+        }
         else
           printf("(Real: %fHz, Imag: %f)Hz\n", fft[tone][0], fft[tone][1]);
+        return true;
     }
+
+    /* Should not get here */
+    return false;
 }
 
 
@@ -240,7 +243,7 @@ static void gen_tone(const char *fname, float secs, int tone, int flags)
 
 static void analyize_tone(const char *fname, float secs, int tone, int flags)
 {
-    int i, n_samples;
+    int i, n_samples, found;
     double *data;
     frame_t frame;
     FILE *fp;
@@ -256,6 +259,7 @@ static void analyize_tone(const char *fname, float secs, int tone, int flags)
       ERR("Could not open %s for reading", fname);
 
     /* Assume the input is a series of frame_t */
+    found = 0;
     do 
     {
         if (fp != stdin) 
@@ -276,7 +280,7 @@ static void analyize_tone(const char *fname, float secs, int tone, int flags)
         for (i=0; i<size/sizeof(frame_t); ++i)
         {
             ret = fread(&frame, 1, sizeof(frame), fp);
-            if (ret != sizeof(frame))
+            if (ret == -1 || ((fp!=stdin && ret!=sizeof(frame))))
               ERR("Error extracting data from input stream: "
                   "read %zd of %zd bytes", ret, sizeof(frame));
             byte += sizeof(frame);
@@ -291,12 +295,18 @@ static void analyize_tone(const char *fname, float secs, int tone, int flags)
         plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
 
-        find_tone(tone, secs * RATE, out, flags & FLAG_DTMF);
+        found += find_tone(tone, secs * RATE, out, flags);
 
         fftw_destroy_plan(plan);
         fftw_free(out);
         fftw_free(data);
     } while (fp == stdin && !feof(stdin) && !ferror(stdin));
+
+    if (!found)
+      printf("==> Tone could not be located\n");
+
+    if (flags & FLAG_VERBOSE)
+      dump_dtmf(out);
 
     fclose(fp);
 }
@@ -346,7 +356,9 @@ int main(int argc, char **argv)
     else if (do_gen_tone)
       gen_tone(fname, secs, tone, flags);
     else
-      analyize_tone(fname, secs, tone, flags);
+    {
+        analyize_tone(fname, secs, tone, flags);
+    }
 
     return 0;
 }
