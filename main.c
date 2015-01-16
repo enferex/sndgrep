@@ -14,10 +14,18 @@
 #endif
 
 
-#define RATE          8000      /* 8.0kHz */
-#define PI2           (M_PI*2.0)
-#define TAG           "sndgrep"
-#define DTMF_BAD_DIGIT -1        /* -1 isnt a key :-) */
+#define RATE            8000 /* 8.0kHz */
+#define PI2             (M_PI*2.0)
+#define TAG             "sndgrep"
+#define DTMF_LO         0 /* Low frequency index  */
+#define DTMF_HI         1 /* High frequency index */
+#define DTMF_BAD_DIGIT -1 /* -1 isnt a key :-)    */
+
+
+/* Bit-maskable flags */
+#define FLAG_NONE    0
+#define FLAG_VERBOSE 1
+#define FLAG_DTMF    2
 
 
 #define ERR(...) \
@@ -47,8 +55,6 @@ static void usage(const char *execname)
 
 
 /* https://en.wikipedia.org/wiki/Dual-tone_multi-frequency_signaling */
-#define DTMF_LO 0 /* Low frequency index  */
-#define DTMF_HI 1 /* High frequency index */
 static const float dtmf[][2] = 
 {
     {941.0f, 1336.0f}, /* 0 */
@@ -124,22 +130,6 @@ static void dump_dtmf(fftw_complex *fft, int match_digit)
     }
 }
 
-#if 0
-typedef struct fft_bin
-{
-    int    idx;
-    double val;
-} fft_bin_t;
-
-
-static int cmp_fft_bins(const void *a, const void *b)
-{
-    const fft_bin_t *aa = (fft_bin_t *)a;
-    const fft_bin_t *bb = (fft_bin_t *)b;
-    return aa->val < bb->val;
-}
-#endif
-
 
 /* Search the DTMF tone bins and find the closest dtmf (hi and lo) that match.
  * Returns the DTMF key that generates the two tones together.
@@ -164,7 +154,7 @@ static int find_dtmf_digit(fftw_complex *fft)
 }
 
 
-static void find_tone(int tone, int n, fftw_complex *fft, _Bool do_dtmf)
+static void find_tone(int tone, int n, fftw_complex *fft, int flags)
 {
     /* Take the FFT index (bin) and convert back to a frequency
      * The freq represented by each bin is:
@@ -174,27 +164,19 @@ static void find_tone(int tone, int n, fftw_complex *fft, _Bool do_dtmf)
      * Thanks to:
      * https://stackoverflow.com/questions/4364823/how-to-get-frequency-from-fft-result
      */
-    if (do_dtmf)
+    if (flags & FLAG_DTMF)
     {
         int digit = find_dtmf_digit(fft);
         if (digit != DTMF_BAD_DIGIT)
-          printf(" DTMF Key %d\n", digit);
+          printf("==> DTMF Key %d <==\n", digit);
         else
-          printf(" DTMF Key Not Found\n");
-        dump_dtmf(fft, digit);
+          printf("==> DTMF Key Not Found <==\n");
+
+        if (flags & FLAG_VERBOSE)
+          dump_dtmf(fft, digit);
     }
     else
     {
-#if 0
-        fft_bin_t *bins = malloc(n * sizeof(fft_bin_t));
-        for (i=0; i<n; ++i)
-        {
-            bins[i].idx = i;
-            bins[i].val = fft[i][1];
-        }
-
-        qsort(bins, n, sizeof(fft_bin_t), cmp_fft_bins);
-#endif
         printf("Searched tone(%f)  ==>  ", (float)tone);
         if (tone > n || tone < n)
           printf("N/A (choose a frequency less than %.02fHz\n", (float)n);
@@ -204,7 +186,7 @@ static void find_tone(int tone, int n, fftw_complex *fft, _Bool do_dtmf)
 }
 
 
-static void gen_tone(const char *fname, float secs, int tone, _Bool do_dtmf)
+static void gen_tone(const char *fname, float secs, int tone, int flags)
 {
     FILE *fp;
     size_t size;
@@ -255,11 +237,7 @@ static void gen_tone(const char *fname, float secs, int tone, _Bool do_dtmf)
 }
 
 
-static void analyize_tone(
-    const char *fname,
-    float       secs,
-    int         tone,
-    _Bool       do_dtmf)
+static void analyize_tone(const char *fname, float secs, int tone, int flags)
 {
     int i, n_samples;
     double *data;
@@ -312,7 +290,7 @@ static void analyize_tone(
         plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
 
-        find_tone(tone, secs * RATE, out, do_dtmf);
+        find_tone(tone, secs * RATE, out, flags & FLAG_DTMF);
 
         fftw_destroy_plan(plan);
         fftw_free(out);
@@ -325,9 +303,8 @@ static void analyize_tone(
 
 int main(int argc, char **argv)
 {
-    int i, tone, do_gen_tone;
+    int i, tone, do_gen_tone, flags;
     float secs;
-    _Bool do_dtmf;
     const char *fname;
     static const struct option opts[] = 
     {
@@ -337,16 +314,17 @@ int main(int argc, char **argv)
         {"duration", required_argument, NULL, 'd'},
         {"help",     no_argument,       NULL, 'h'},
         {"dtmf",     no_argument,       NULL, 'D'},
+        {"verbose",  no_argument,       NULL, 'v'},
         {NULL, 0, NULL, 0},
     };
 
     do_gen_tone = -1;
-    do_dtmf = false;
     secs = 0.0f;
     tone = 0;
     fname = NULL;
+    flags = FLAG_NONE;
 
-    while ((i=getopt_long(argc, argv, "-gst:d:h:x", opts, NULL)) != -1)
+    while ((i=getopt_long(argc, argv, "-gst:d:hx", opts, NULL)) != -1)
     {
         switch (i)
         {
@@ -355,16 +333,19 @@ int main(int argc, char **argv)
             case 's': do_gen_tone = false; break;
             case 't': tone = atoi(optarg); break; 
             case 'd': secs = atoi(optarg); break;
-            case 'D': do_dtmf = true; break;
+            case 'D': flags |= FLAG_DTMF; break;
             case 'h': usage(argv[0]); break;
+            case 'v': flags |= FLAG_VERBOSE; break;
             default:  exit(EXIT_FAILURE); break;
         }
     }
 
-    if (do_gen_tone)
-      gen_tone(fname, secs, tone, do_dtmf);
+    if (do_gen_tone == -1)
+      usage(argv[0]);
+    else if (do_gen_tone)
+      gen_tone(fname, secs, tone, flags);
     else
-      analyize_tone(fname, secs, tone, do_dtmf);
+      analyize_tone(fname, secs, tone, flags);
 
     return 0;
 }
