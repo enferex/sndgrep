@@ -3,6 +3,8 @@ OBJS=main.o
 CC=gcc
 CFLAGS=-Wall -g3 -O0 $(EXTRA_CFLAGS)
 CLIBS=-lfftw3 -lm -lasound
+TESTS_KEYS=$(shell seq 0 10)
+TESTS=$(TESTS_KEYS:%=test%.dat)
 
 %.o: %.c
 	$(CC) -c $^ $(CFLAGS)
@@ -10,9 +12,15 @@ CLIBS=-lfftw3 -lm -lasound
 $(APP): $(OBJS)
 	$(CC) -o $@ $^ $(CLIBS)
 
-test: $(APP)
-	./$(APP) --dtmf --generate -t 1 -d 1 test.dat	
-	./$(APP) --dtmf --search   -v -t 1 -d 1 test.dat
+%.dat:
+	@./$(APP) --dtmf --generate -t  $(basename $(subst test,,$@)) -d 1 $@
+	@./$(APP) --dtmf --search -v -t $(basename $(subst test,,$@)) -d 1 $@
+
+.PHONY:test
+test: clean clean-tests $(APP) $(TESTS)
 	
 clean:
 	$(RM) $(APP) $(OBJS)
+
+clean-tests:
+	$(RM) $(TESTS)
