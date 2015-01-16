@@ -195,8 +195,9 @@ static void gen_tone(const char *fname, float secs, int tone, int flags)
     if (secs <= 0)
       ERR("Unsupported duration value: %f", secs);
 
-    printf("Writing tone of %.02fHz for %02f second%s to %s...\n",
-           (float)tone, secs, (secs == 1.0f) ? "" : "s", fname);
+    if (flags & FLAG_DTMF)
+      printf("==> Writing DTMF key tone %d for %.02f second%s to %s...\n",
+             tone, secs, (secs == 1.0f) ? "" : "s", fname);
 
     data = make_dtmf(secs, tone, &size);
 
@@ -324,7 +325,7 @@ int main(int argc, char **argv)
     fname = NULL;
     flags = FLAG_NONE;
 
-    while ((i=getopt_long(argc, argv, "-gst:d:hx", opts, NULL)) != -1)
+    while ((i=getopt_long(argc, argv, "-t:d:gshxv", opts, NULL)) != -1)
     {
         switch (i)
         {
