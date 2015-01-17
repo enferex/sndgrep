@@ -3,7 +3,7 @@ OBJS=main.o
 CC=gcc
 CFLAGS=-Wall -g3 -O0 $(EXTRA_CFLAGS)
 CLIBS=-lfftw3 -lm -lasound
-TESTS_KEYS=$(shell seq 0 10)
+TESTS_KEYS=$(shell seq 0 9)
 TESTS=$(TESTS_KEYS:%=test%.dat)
 
 %.o: %.c
