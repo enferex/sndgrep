@@ -9,7 +9,10 @@ specified tone.  This tool was originally designed to find DTMF tones in audio
 streams.
 
 This tool can also generate tones (including dtmf) and write that output to a
-file.
+file. However, that is not the primary use of this tool.  Personally, I am 
+thinking about making this tone-generation feature only available in debug mode.
+
+Note that this searches for the specified tone one second at a time.
 
 This is pre-alpha and there is a ton of testing that needs to be done.
 Primarily, I only care about DTMF, so traditional tones have not been tested
@@ -27,8 +30,9 @@ Specifically, 64bit PCM at an 8kHz sampling rate.
 
 TODO: 
 * Support fractional frequencies
+* Support multiple input and output formats
 * More testing
-* Better searching
+* Better searching (more fine than one second a time)
 * Report time offset in sample where a tone is found
 
 
