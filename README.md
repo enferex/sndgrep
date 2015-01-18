@@ -22,6 +22,12 @@ Limitations
 Currently this tool only supports PCM as input to search, or output to create.
 Specifically, 64bit PCM at an 8kHz sampling rate.
 
+TODO: 
+* Support fractional frequencies
+* More testing
+* Better searching
+* Report time offset in sample where a tone is found
+
 
 Dependencies
 ------------

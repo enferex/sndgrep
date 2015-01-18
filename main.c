@@ -191,7 +191,7 @@ static _Bool find_tone(int tone, int n, fftw_complex *fft, int flags)
     else /* Else, not DTMF */
     {
         printf("Searched tone(%.02fHz)  ==>  ", (float)tone);
-        if (tone > n || tone < n)
+        if (tone > n)
         {
             printf("N/A (choose a frequency less than %.02fHz)\n", (float)n);
             return false;
@@ -368,6 +368,9 @@ int main(int argc, char **argv)
             default:  exit(EXIT_FAILURE); break;
         }
     }
+    
+    if (tone < 0.0f)
+      ERR("Please choose a tone greater than 0.00Hz\n");
 
     if (do_gen_tone == -1)
       usage(argv[0]);
