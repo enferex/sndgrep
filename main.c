@@ -190,14 +190,14 @@ static _Bool find_tone(int tone, int n, fftw_complex *fft, int flags)
     }
     else
     {
-        printf("Searched tone(%f)  ==>  ", (float)tone);
+        printf("Searched tone(%.02f)  ==>  ", (float)tone);
         if (tone > n || tone < n)
         {
-            printf("N/A (choose a frequency less than %.02fHz\n", (float)n);
+            printf("N/A (choose a frequency less than %.02fHz)\n", (float)n);
             return false;
         }
         else
-          printf("(Real: %fHz, Imag: %f)Hz\n", fft[tone][0], fft[tone][1]);
+          printf("(Real: %.02fHz, Imag: %.02f)Hz\n", fft[tone][0], fft[tone][1]);
         return true;
     }
 
@@ -213,7 +213,7 @@ static void gen_tone(const char *fname, float secs, int tone, int flags)
     frame_t *data;
 
     if (secs <= 0)
-      ERR("Unsupported duration value: %f", secs);
+      ERR("Unsupported duration value: %.02f", secs);
 
     if (flags & FLAG_DTMF)
       printf("==> Writing DTMF key tone %d for %.02f second%s to %s...\n",
