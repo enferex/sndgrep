@@ -258,14 +258,14 @@ static void gen_tone(const char *fname, float secs, int tone, int flags)
 }
 
 
-static void analyize_tone(const char *fname, float secs, int tone, int flags)
+static void analyize_tone(const char *fname, int tone, int flags)
 {
-    int i, n_samples, found;
+    int i, n_samples, found, second, secs;
     double *data;
     frame_t frame;
     FILE *fp;
-    struct stat stat;
     size_t size, byte, ret;
+    struct stat stat;
     fftw_plan plan;
     fftw_complex *out;
     const size_t frame_sz  = sizeof(double);
@@ -275,26 +275,34 @@ static void analyize_tone(const char *fname, float secs, int tone, int flags)
     else if (!(fp = fopen(fname, "rb")))
       ERR("Could not open %s for reading", fname);
 
-    /* Assume the input is a series of frame_t */
-    found = 0;
-    do 
-    {
-        /* If a input file is specified... */
-        if (fp != stdin) 
-        {
-            fstat(fileno(fp), &stat);
-            size = stat.st_size;
-        }
-        else /* Else, input must be from stdin */
-          size = (RATE * frame_sz); /* One second of 8kHz */
+    /* How big one second of audio is */
+    n_samples = RATE;
+    size = RATE * frame_sz;
 
-        n_samples = ceil((double)size / (double)frame_sz);
+    /* Determine how much data needs to be read in */
+    if (fp != stdin)
+    {
+        fstat(fileno(fp), &stat);
+        secs = stat.st_size / size;
+    }
+    else
+      secs = 1;
+
+    /* Read in one second of audio at a time */
+    second = found = 0;
+    while (secs)
+    {
+        /* Only modify seconds if we actually know how much data there is to
+         * read in... that is, if we have a file, if not, and only have a stream
+         * (stdin) then we wait till an EOF... at the bottom of this loop
+         */
+        ++second;
+        if (fp != stdin)
+          --secs;
 
         /* Suck in the data */
-        size = frame_sz * n_samples;
         data = malloc(sizeof(double) * (size/sizeof(frame_t)));
         byte = 0;
-
         for (i=0; i<size/sizeof(frame_t); ++i)
         {
             ret = fread(&frame, 1, sizeof(frame), fp);
@@ -309,16 +317,24 @@ static void analyize_tone(const char *fname, float secs, int tone, int flags)
 #endif
         }
 
+        /* Process data */
         out = fftw_malloc(sizeof(fftw_complex) * n_samples);
         plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
-
-        found += find_tone(tone, secs * RATE, out, flags);
-
+        if (find_tone(tone, secs * RATE, out, flags))
+        {
+            ++found;
+            printf("==> Match located at %d second%s in the data stream <==\n",
+                   second, (second > 1) ? "s" : "");
+        }
         fftw_destroy_plan(plan);
         fftw_free(out);
         fftw_free(data);
-    } while (fp == stdin && !feof(stdin) && !ferror(stdin));
+
+        /* Ending case */
+        if (feof(fp) || ferror(fp))
+          break;
+    }
 
     if (!found)
       printf("==> Tone could not be located\n");
@@ -377,11 +393,7 @@ int main(int argc, char **argv)
     else if (do_gen_tone)
       gen_tone(fname, secs, tone, flags);
     else
-    {
-        if (secs == 0.0f)
-          secs = 1.0f;
-        analyize_tone(fname, secs, tone, flags);
-    }
+      analyize_tone(fname, tone, flags);
 
     return 0;
 }

@@ -16,6 +16,9 @@ $(APP): $(OBJS)
 	@./$(APP) --dtmf --generate -t $(basename $(subst test,,$@)) -d 1 $@
 	@./$(APP) --dtmf --search -t $(basename $(subst test,,$@)) $@
 	@./$(APP) --dtmf --search -t $(basename $(subst test,,$@)) < $@
+	@./$(APP) --dtmf --generate -t 5 -d 3 test.dat
+	@./$(APP) --dtmf --search -t 5 test.dat
+	@./$(APP) --dtmf --search -t 5 < test.dat
 
 .PHONY:test
 test: clean clean-tests $(APP) $(TESTS)
@@ -24,4 +27,4 @@ clean: clean-tests
 	@$(RM) -v $(APP) $(OBJS)
 
 clean-tests:
-	@$(RM) -v $(TESTS)
+	@$(RM) -v $(TESTS) test.dat
