@@ -188,7 +188,7 @@ static _Bool find_tone(int tone, int n, fftw_complex *fft, int flags)
             return true;
         }
     }
-    else
+    else /* Else, not DTMF */
     {
         printf("Searched tone(%.02f)  ==>  ", (float)tone);
         if (tone > n || tone < n)
@@ -279,14 +279,15 @@ static void analyize_tone(const char *fname, float secs, int tone, int flags)
     found = 0;
     do 
     {
+        /* If a input file is specified... */
         if (fp != stdin) 
         {
             fstat(fileno(fp), &stat);
             size = stat.st_size;
         }
-        else
+        else /* Else, input must be from stdin */
           size = (RATE * frame_sz); /* One second of 8kHz */
-            
+
         n_samples = ceil((double)size / (double)frame_sz);
 
         /* Suck in the data */
@@ -374,6 +375,8 @@ int main(int argc, char **argv)
       gen_tone(fname, secs, tone, flags);
     else
     {
+        if (secs == 0.0f)
+          secs = 1.0f;
         analyize_tone(fname, secs, tone, flags);
     }
 
