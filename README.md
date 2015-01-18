@@ -16,6 +16,9 @@ Primarily, I only care about DTMF, so traditional tones have not been tested
 (e.g., you can feel free to test these by NOT specifying the --dtmf command
 line argument).
 
+*Running a test `make test` will overwrite any files 
+named: test.dat, test[0-9].dat*
+
 
 Limitations
 -----------
