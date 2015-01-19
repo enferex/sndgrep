@@ -33,7 +33,6 @@ TODO:
 * Support multiple input and output formats
 * More testing
 * Better searching (more fine than one second a time)
-* Report time offset in sample where a tone is found
 
 
 Dependencies
