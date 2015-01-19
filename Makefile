@@ -14,14 +14,16 @@ $(APP): $(OBJS)
 
 %.dat:
 	@./$(APP) --dtmf --generate -t $(basename $(subst test,,$@)) -d 1 $@
-	@./$(APP) --dtmf --search -t $(basename $(subst test,,$@)) $@
-	@./$(APP) --dtmf --search -t $(basename $(subst test,,$@)) < $@
-	@./$(APP) --dtmf --generate -t 5 -d 3 test.dat
-	@./$(APP) --dtmf --search -t 5 test.dat
-	@./$(APP) --dtmf --search -t 5 < test.dat
+	@./$(APP) --dtmf --search $@
+	@./$(APP) --dtmf --search < $@
 
 .PHONY:test
-test: clean clean-tests $(APP) $(TESTS)
+test: clean clean-tests $(APP) $(TESTS) long-stream-test
+
+long-stream-test: $(APP)
+	@./$(APP) --dtmf --generate -t 5 -d 3 test.dat
+	@./$(APP) --dtmf --search test.dat
+	@./$(APP) --dtmf --search < test.dat
 	
 clean: clean-tests
 	@$(RM) -v $(APP) $(OBJS)
