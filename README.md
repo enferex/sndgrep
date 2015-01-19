@@ -56,13 +56,13 @@ feature build sndgrep as:
 Examples
 --------
 * Generate a 1 second DTMF tone of the '5' key:
-sndgrep --dtmf --generate -d 1 -t 5 myoutput.pcm
+`sndgrep --dtmf --generate -d 1 -t 5 myoutput.pcm`
 
 * Search for all DTMF number tones in a provided input file:
-sndgrep --dtmf --search somefile.pcm
+`sndgrep --dtmf --search somefile.pcm`
 
 * Search for all DTMF number tones in an audio stream:
-sndgrep --dtmf --search < /dev/mystream
+`sndgrep --dtmf --search < /dev/mystream`
 
 
 Super Awesome Resources
@@ -73,6 +73,6 @@ Super Awesome Resources
 
 
 Contact
-=======
-enferex 
+-------
+enferex
 mattdavis9@gmail.com
