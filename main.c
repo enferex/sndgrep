@@ -215,6 +215,9 @@ static void gen_tone(const char *fname, float secs, int tone, int flags)
     if (secs <= 0)
       ERR("Unsupported duration value: %.02f", secs);
 
+    if (tone < 0)
+      ERR("Please choose a tone greater than 0Hz\n");
+
     if (flags & FLAG_DTMF)
       printf("==> Writing DTMF key tone %d for %.02f second%s to %s...\n",
              tone, secs, (secs == 1.0f) ? "" : "s", fname);
@@ -270,6 +273,12 @@ static void analyize_tone(const char *fname, int tone, int flags)
     fftw_complex *out;
     const size_t frame_sz  = sizeof(double);
 
+    if (!(flags & FLAG_DTMF) && (tone <= 0))
+      ERR("Please choose a tone greater than 0.00Hz");
+    else if ((flags & FLAG_DTMF) && (tone > 0))
+      ERR("Do not specify a tone when searching DTMF,"
+          " all digit tones (0-9) are searched");
+
     if (!fname)
       fp = stdin;
     else if (!(fp = fopen(fname, "rb")))
@@ -321,12 +330,16 @@ static void analyize_tone(const char *fname, int tone, int flags)
         out = fftw_malloc(sizeof(fftw_complex) * n_samples);
         plan = fftw_plan_dft_r2c_1d(n_samples, data, out, FFTW_ESTIMATE);
         fftw_execute(plan);
-        if (find_tone(tone, secs * RATE, out, flags))
+
+        /* Read the results */
+        if (find_tone(i, secs * RATE, out, flags))
         {
             ++found;
             printf("==> Match located at %d second%s in the data stream <==\n",
                    second, (second > 1) ? "s" : "");
         }
+
+        /* Clean up */
         fftw_destroy_plan(plan);
         fftw_free(out);
         fftw_free(data);
@@ -365,7 +378,7 @@ int main(int argc, char **argv)
 
     do_gen_tone = -1;
     secs = 0.0f;
-    tone = 0;
+    tone = -1;
     fname = NULL;
     flags = FLAG_NONE;
 
@@ -385,9 +398,6 @@ int main(int argc, char **argv)
         }
     }
     
-    if (tone < 0.0f)
-      ERR("Please choose a tone greater than 0.00Hz\n");
-
     if (do_gen_tone == -1)
       usage(argv[0]);
     else if (do_gen_tone)

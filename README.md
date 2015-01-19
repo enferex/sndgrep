@@ -58,11 +58,11 @@ Examples
 * Generate a 1 second DTMF tone of the '5' key:
 sndgrep --dtmf --generate -d 1 -t 5 myoutput.pcm
 
-* Search for the DTMF '5' tone in a provided input file:
-sndgrep --dtmf --search -t 5 somefile.pcm
+* Search for all DTMF number tones in a provided input file:
+sndgrep --dtmf --search somefile.pcm
 
-* Search for the DTMF '5' tone in an audio stream:
-sndgrep --dtmf --search -t 5 < /dev/mystream
+* Search for all DTMF number tones in an audio stream:
+sndgrep --dtmf --search < /dev/mystream
 
 
 Super Awesome Resources
